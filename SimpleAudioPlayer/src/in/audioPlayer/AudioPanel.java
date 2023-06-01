@@ -10,7 +10,11 @@ import java.io.*;
 
 public class AudioPanel extends JPanel implements ActionListener  
 {
-	JTextField fileInput = new JTextField("C:                        ");
+	JLabel findLabel = new JLabel("Audio file: ");
+	JTextField fileInput = new JTextField(30);
+	JButton findFileButton = new JButton("Find file...");
+	JFileChooser fileChooser = new JFileChooser();
+	
 	JButton playButton = new JButton("Play");
 	JButton pauseButton = new JButton("Pause");
 	JButton stopButton = new JButton("Stop");
@@ -25,12 +29,25 @@ public class AudioPanel extends JPanel implements ActionListener
 	boolean loopClip = false;
 	Clip currentClip = null;
 	
+	String desktopDir;
+	
 	public AudioPanel() {
 		// TODO Auto-generated constructor stub
 		
 		setLayout(new FlowLayout());
 		
+		add(findLabel);
+		
+		desktopDir = System.getProperty("user.home") + File.separator + "Desktop";
+		fileChooser.setCurrentDirectory(new File(desktopDir));
+		fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+		fileChooser.addChoosableFileFilter(new FindTypeFilter("wav", "WAV Audio Type"));
+		fileChooser.setAcceptAllFileFilterUsed(true);
+		
+		findFileButton.addActionListener(this);
+		
 		add(fileInput);
+		add(findFileButton);
 		
 		playButton.addActionListener(this);
 		pauseButton.addActionListener(this);
@@ -54,7 +71,13 @@ public class AudioPanel extends JPanel implements ActionListener
 		try
 		{
 			Object source = e.getSource();
-			if(source == playButton)
+			if(source == findFileButton)
+			{ 
+				if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                fileInput.setText(fileChooser.getSelectedFile().getAbsolutePath());
+				}
+			}
+			else if(source == playButton)
 			{
 				//get audio clip
 				//try
