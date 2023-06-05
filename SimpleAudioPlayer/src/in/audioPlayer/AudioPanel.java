@@ -10,6 +10,11 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 
+//TODO:
+/*
+ * For soundboard, have yellow outline for conflicting sounds with same keybind
+ * Ask the user what they want to do to resolve that issue (play all sounds at once, round-robin, play a random one, do nothing)
+ */
 public class AudioPanel extends JPanel implements ActionListener  
 {
 	JTabbedPane tabs = new JTabbedPane();
@@ -51,6 +56,7 @@ public class AudioPanel extends JPanel implements ActionListener
 	Clip currentClip = null;
 	AudioInputStream convertedStream = null;
 	
+	File chosenRecordFile = null;
 	boolean recordingAudio = false;
 	
 	String desktopDir;
@@ -125,7 +131,6 @@ public class AudioPanel extends JPanel implements ActionListener
 	}
 	public void actionPerformed(ActionEvent e)
 	{
-		System.out.println(startTime);
 		try
 		{
 			Object source = e.getSource();
@@ -199,80 +204,27 @@ public class AudioPanel extends JPanel implements ActionListener
 				//DOESNT WORK FOR NOW
 				if(fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION)
 				{
-					File saveToFile = fileChooser.getSelectedFile();
+					chosenRecordFile = fileChooser.getSelectedFile();
 					//saveToFile.renameTo(new File(fileChooser.getSelectedFile().getPath() + ".wav"));
 					
-					int totalFramesRead = 0;
-					int bytesPerFrame = convertedStream.getFormat().getFrameSize();
-					int numBytes = 1024 * bytesPerFrame;
-					byte[] audioBytes = new byte[numBytes];
-					
-					int numBytesRead = 0;
-					int numFramesRead = 0;
-					while((numBytesRead = convertedStream.read(audioBytes)) != -1)
-					{
-						numFramesRead = numBytesRead / bytesPerFrame;
-						totalFramesRead += numFramesRead;
-						
-					}
-					
-					//all bytes are 0
-					for(int i = 0; i < audioBytes.length; i++)
-					{
-						System.out.println(audioBytes[i]);
-					}
-					
-					FileOutputStream outputStream = new FileOutputStream(saveToFile);
-					outputStream.write(audioBytes);
 					
 					//AudioSystem.write(convertedStream, AudioFileFormat.Type.WAVE, saveToFile);
-					JOptionPane.showMessageDialog(null, "Successfully saved audio to " + saveToFile.getName() + ".");
+					JOptionPane.showMessageDialog(null, "Saving audio to " + chosenRecordFile.getName() + ".");
 				}
 			}
 			else if(source == recordButton)
 			{
+				if(chosenRecordFile == null)
+				{
+					JOptionPane.showMessageDialog(null, "You need to choose a file to record to first!");
+					System.out.println("Must choose a file to record to first!");
+					return;
+				}
+				
 				recordingAudio = !recordingAudio;
 				recordButton.setText(recordingAudio ? "Stop" : "Record");
-				
-				//aka wav recording
-				AudioFormat recordFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, 44100, 16, 2, 4, 44100, false); //AudioFormat recordFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, 44100, 16, 2, 4, 44100, false);
-				DataLine.Info info = new DataLine.Info(TargetDataLine.class, recordFormat); //gets the computer mic stuff 
-				
-				final TargetDataLine targetLine = (TargetDataLine)AudioSystem.getTargetDataLine(recordFormat);
-				targetLine.open();
 
-				//why do I feel like this is unsafe/not the best way to implement
-				Thread thread = new Thread()
-				{
-					@Override public void run()
-					{
-						try 
-						{
-						AudioInputStream audioStream = new AudioInputStream(targetLine);
-						DateTimeFormatter dtf = DateTimeFormatter.ofPattern("MM-dd-yyyy HH-mm-ss");
-						
-						File audioFile = new File(desktopDir + File.pathSeparatorChar + "Recording " + dtf.format(LocalDateTime.now()) + ".wav");
-							AudioSystem.write(audioStream, AudioFileFormat.Type.WAVE, audioFile);
-						} 
-						catch (IOException e) 
-						{
-							JOptionPane.showMessageDialog(null, e.toString());
-							e.printStackTrace();
-						}
-					}
-				};
-				
-				if(recordingAudio)
-				{
-					System.out.println("Started recording");
-					targetLine.start();
-					thread.start();
-				}
-				else
-				{
-					targetLine.stop();
-					targetLine.close();
-				}
+				if(!recordingAudio) RecordAudio();
 			}
 		}
 		catch(Exception error)
@@ -307,8 +259,152 @@ public class AudioPanel extends JPanel implements ActionListener
 		
 		return null;
 	}
+	
+	void RecordAudio()
+	{
+		//code only runs when we want to record because the while loop handles what happens when we dont want to record
+		if(recordingAudio) return; //DONT INVERT THIS IF STATEMENT IDIOT
+		
+		
+		//aka wav recording format
+		AudioFormat recordFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, 44100, 16, 2, 4, 44100, false); //AudioFormat recordFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, 44100, 16, 2, 4, 44100, false);
+		DataLine.Info info = new DataLine.Info(TargetDataLine.class, recordFormat); //gets the computer mic stuff 
+		if(!AudioSystem.isLineSupported(info))
+		{
+			System.out.println("Audio line is not supported!");
+			return;
+		}
+		
+		//final TargetDataLine targetLine = (TargetDataLine)AudioSystem.getTargetDataLine(recordFormat);
+		//targetLine.open();
+
+		TargetDataLine line = null;
+		try
+		{
+			line = (TargetDataLine) AudioSystem.getLine(info);
+			line.open(recordFormat);
+		}
+		catch(LineUnavailableException error)
+		{
+			error.printStackTrace();
+		}
+		try
+		{
+		
+		//ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		//int numBytesRead = 0;
+		//byte[] data = new byte[line.getBufferSize() / 5];
+		
+		
+			System.out.println("Started recording " + recordingAudio);
+			line.start();
+			
+			
+			while(recordingAudio)
+			{
+				AudioInputStream recordStream = new AudioInputStream(line);
+				
+				DateTimeFormatter dtf = DateTimeFormatter.ofPattern("MM-dd-yyyy HH-mm-ss");
+				File audioFile = new File(desktopDir + File.pathSeparatorChar + "Recording " + dtf.format(LocalDateTime.now()) + ".wav");
+				
+				//outputStream.write(data);
+				//numBytesRead = line.read(data, 0, data.length);
+				//baos.write(data, 0, numBytesRead);
+				//baos.writeTo(outputStream); //cant do this because it is getting no data
+				AudioSystem.write(recordStream, AudioFileFormat.Type.WAVE, audioFile);
+			}
+			
+			System.out.println("Stopped recording");
+//			//all bytes are 0
+//			for(int i = 0; i < data.length; i++)
+//			{
+//				System.out.println(data[i]);
+//			}
+			
+			//thread.start();
+			
+			
+
+				//FileOutputStream outputStream = new FileOutputStream(chosenRecordFile);
+				//close the stream (because u cant modify the file while the app is still open)
+				//outputStream.flush();
+				//outputStream.close();
+			}
+			catch(IOException ioError)
+			{
+				JOptionPane.showMessageDialog(null, ioError.toString());
+				ioError.printStackTrace();
+			}
+			finally
+			{
+				line.flush();
+				line.close();
+			}
+	}
+	
 	Optional<String> GetFileExtension(String _fileName)
 	{
 		return Optional.ofNullable(_fileName).filter(f -> f.contains(".")).map(f -> f.substring(_fileName.lastIndexOf('.') + 1));
 	}
 }
+
+//else if(source == exportButton)
+//{
+//	//fileChooser.setDialogTitle("");
+//	
+//	//DOESNT WORK FOR NOW
+//	if(fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION)
+//	{
+//		File saveToFile = fileChooser.getSelectedFile();
+//		//saveToFile.renameTo(new File(fileChooser.getSelectedFile().getPath() + ".wav"));
+//		
+//		int totalFramesRead = 0;
+//		int bytesPerFrame = convertedStream.getFormat().getFrameSize();
+//		int numBytes = 1024 * bytesPerFrame;
+//		byte[] audioBytes = new byte[numBytes];
+//		
+//		int numBytesRead = 0;
+//		int numFramesRead = 0;
+//		while((numBytesRead = convertedStream.read(audioBytes)) != -1)
+//		{
+//			numFramesRead = numBytesRead / bytesPerFrame;
+//			totalFramesRead += numFramesRead;
+//			
+//		}
+//		
+//		//all bytes are 0
+//		for(int i = 0; i < audioBytes.length; i++)
+//		{
+//			System.out.println(audioBytes[i]);
+//		}
+//		
+//		FileOutputStream outputStream = new FileOutputStream(saveToFile);
+//		outputStream.write(audioBytes);
+//		
+//		//AudioSystem.write(convertedStream, AudioFileFormat.Type.WAVE, saveToFile);
+//		JOptionPane.showMessageDialog(null, "Successfully saved audio to " + saveToFile.getName() + ".");
+//	}
+//}
+
+
+
+//why do I feel like this is unsafe/not the best way to implement
+//Thread thread = new Thread()
+//{
+//	@Override public void run()
+//	{
+//		try 
+//		{
+//		AudioInputStream audioStream = new AudioInputStream(targetLine);
+//		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("MM-dd-yyyy HH-mm-ss");
+//		
+//		File audioFile = new File(desktopDir + File.pathSeparatorChar + "Recording " + dtf.format(LocalDateTime.now()) + ".wav");
+//			AudioSystem.write(audioStream, AudioFileFormat.Type.WAVE, audioFile);
+//		} 
+//		catch (IOException e) 
+//		{
+//			JOptionPane.showMessageDialog(null, e.toString());
+//			e.printStackTrace();
+//		}
+//	}
+//};
